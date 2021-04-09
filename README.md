@@ -49,7 +49,7 @@ The present repository contains:
     information has or will be provided.
 * <b> Sensor Band Information </b>
     * A list of each of the Headwall Nano-Hyperspec's bands, their frequencies, and corresponding colours of visible light where applicable.
-* <b> Statistical Results
+* <b> Statistical Results </b>
     * A folder containing all of the statistical results and values calculated for the present study, and consequently used to create the associated manuscipt/article.
 * <b> R Code for Robust Statistical Analysis </b>
     * All the R code used to process the corresponding hyperspectral signatures and extract the statistical results
