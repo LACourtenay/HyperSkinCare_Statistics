@@ -391,15 +391,9 @@ multivariate_tests <- function(data, min_band, max_band, method) {
 
 #
 
-# set working directory -----------------------------
-
-setwd("C:\\Users\\Lloyd\\Desktop\\TIDOP\\Proyecto Cancer\\Articulo Estadistico\\Codigo") # user must specify their working directory
-
-#
-
 # load data ---------------------------
 
-a <- read.table("hyperspectral_data.csv", sep = ",", dec = ".", head = TRUE)
+a <- read.csv(url("https://raw.githubusercontent.com/LACourtenay/HyperSkinCare_Statistics/main/Files/Hyperspectral_Data.csv"))
 a$Sample <- factor(a$Sample); a$Patient_ID <- factor(a$Patient_ID)
 
 # seperate data according to sample
@@ -794,6 +788,11 @@ grid.arrange(ggplot() +
                scale_x_discrete(breaks = seq(0, 260, 50)),
              ncol = 2, nrow = 1)
 
+# clear memory
+
+rm(H_signature, SCC_signature, BCC_signature)
+
+
 #
 
 # Hypothesis Testing ---------------
@@ -931,6 +930,13 @@ grid.arrange(homosc_H_SCC_plot, homosc_H_SCC_test_stat_plot,
              homosc_SCC_BCC_plot, homosc_SCC_BCC_test_stat_plot,
              nrow = 3, ncol = 2)
 
+# clear memory
+
+rm(homosc_H_SCC_plot, homosc_H_SCC_test_stat_plot,
+   homosc_H_BCC_plot, homosc_H_BCC_test_stat_plot,
+   homosc_SCC_BCC_plot, homosc_SCC_BCC_test_stat_plot,
+   H_BCC_homosc, H_SCC_homosc, SCC_BCC_homosc)
+
 #
 
 # Jensen-Shannon Divergence ------------------------------
@@ -963,6 +969,10 @@ ggplot() +
   xlab("Band") +
   ylab("Similarity") +
   scale_x_discrete(breaks = seq(0, 260, 50))
+
+# clear memory
+
+rm(H_BCC_JSD, H_SCC_JSD, SCC_BCC_JSD)
 
 #
 
@@ -1003,6 +1013,10 @@ ggplot() +
   ylab("Area Under Curve") +
   coord_cartesian(ylim = c(0.45, 0.65)) +
   scale_x_discrete(breaks = seq(50, 210, 20))
+
+# clear memory
+
+rm(H_SCC_ml_results, H_BCC_ml_results, SCC_BCC_ml_results)
 
 #
 
@@ -1075,6 +1089,12 @@ for (i in c(0.2, 0.5, 0.8)) {
               sep = ""))
 }
 
+# clear memory
+
+rm(mult_diff)
+
+#
+
 # Multivariate Hypothesis between 573 and 779nm ---------------------------------------
 
 mult_diff <- multivariate_tests(a, min_band = 75, max_band = 168,
@@ -1144,6 +1164,12 @@ for (i in c(0.2, 0.5, 0.8)) {
               sep = ""))
 }
 
+# clear memory
+
+rm(mult_diff)
+
+#
+
 # Multivariate Hypothesis between 429 and 520 nm ---------------------------------------
 
 mult_diff <- multivariate_tests(a, min_band = 10, max_band = 51,
@@ -1212,6 +1238,10 @@ for (i in c(0.2, 0.5, 0.8)) {
               p_H0(mult_diff$p.value[2,1], priors = i),
               sep = ""))
 }
+
+# clear memory
+
+rm(mult_diff)
 
 #
 
