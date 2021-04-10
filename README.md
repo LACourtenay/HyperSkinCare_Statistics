@@ -66,5 +66,3 @@ Please cite this repository as:
 --------------------------------------------------------
 
 Comments, questions, doubts, suggestions and corrections can all be directed to L. A. Courtenay at the email provided above.
-Science should be a collaborative effort. Archaeology is no exception to this. If any fellow data
-scientist wishes to improve, contribute, update, report issues or help with this work, please do not hesitate to contact the corresponding author.
