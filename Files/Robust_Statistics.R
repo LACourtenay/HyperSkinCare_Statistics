@@ -38,7 +38,38 @@ library(pROC)
 
 # functions ----------------------------
 
-# statistics function
+# Code for the r.bw function.
+#
+# This function originates from the "asbio" pacakge and full credit should be given to the respected authors of said package.
+# This function has been included within this code due to some issues encountered when installing and loading the asbio package.
+# If the user is unable to download or correctly install said package, then the function can be found below
+#
+# Original documentation for the r.bw function in the "asbio" package:
+# https://cran.r-project.org/web/packages/asbio/index.html
+# https://cran.r-project.org/web/packages/asbio/asbio.pdf
+
+r.bw<-function(X,Y=NULL) {
+  
+  U.i<-(X-median(X))/(9*qnorm(.75)*mad(X))
+  a.i<-ifelse(U.i<=-1|U.i>=1,0,1)
+  n<-nrow(as.matrix(X))
+  nx<-sqrt(n)*sqrt(sum((a.i*((X-median(X))^2))*((1-U.i^2)^4)))
+  dx<-abs(sum(a.i*(1-U.i^2)*(1-5*U.i^2)))
+  S.xx<-(nx/dx)^2
+  if(!is.null(Y)){
+    V.i<-(Y-median(Y))/(9*qnorm(.75)*mad(Y))
+    b.i<-ifelse(V.i<=-1|V.i>=1,0,1)
+    ny<-sqrt(n)*sqrt(sum((b.i*((Y-median(Y))^2))*((1-V.i^2)^4)))
+    dy<-abs(sum(b.i*(1-V.i^2)*(1-5*V.i^2)))
+    S.yy<-(ny/dy)^2
+    S.xy<-n*sum((a.i*(X-median(X)))*((1-U.i^2)^2)*(b.i*(Y-median(Y)))*((1-V.i^2)^2))/((sum((a.i*(1-U.i^2))*(1-5*U.i^2)))*(sum((b.i*(1-V.i^2))*(1-5*V.i^2))))
+    R.xy<-S.xy/(sqrt(S.xx*S.yy))}
+  if(is.null(Y))res<-data.frame(S.xx=S.xx)
+  if(!is.null(Y))res<-data.frame(s.xx=S.xx,s.yy=S.yy,s.xy=S.xy,r.xy=R.xy)
+  res
+}
+
+# statistics functions
 
 # P-Value calibration functions
 
@@ -114,7 +145,8 @@ normality_tests <- function(data) {
       )
   }
   normality_results <- normality_results %>%
-    mutate(Band_name = factor(1:n()))
+    mutate(Band_name = factor(1:n())) %>%
+    mutate(Band_freq = freq_details$Frequency..nm.)
   return(normality_results)
 }
 
@@ -137,7 +169,8 @@ residual_calculation <- function(data){
       )
   }
   residual_results <- residual_results %>%
-    mutate(Band_name = factor(1:n()))
+    mutate(Band_name = factor(1:n())) %>%
+    mutate(Band_freq = freq_details$Frequency..nm.)
   return(residual_results)
 }
 
@@ -188,7 +221,8 @@ signature_data <- function(data, type) {
         )
     }
     signature <- signature %>%
-      mutate(Band_name = factor(1:n()))
+      mutate(Band_name = factor(1:n())) %>%
+      mutate(Band_freq = freq_details$Frequency..nm.)
     return(signature)
   }
   else {"Choose type as either 'robust' or 'gaussian"}
@@ -253,7 +287,8 @@ homoscedasticity_test <- function(data, method) {
              lower_pH0 = p_H0(p_Value, priors = 0.8),
              pH0 = p_H0(p_Value, priors = 0.5),
              upper_pH0 = p_H0(p_Value, priors = 0.2)
-      )
+      ) %>%
+      mutate(Band_freq = freq_details$Frequency..nm.)
     return(homosc_results)
   }
   else if (method == "bartlett") {
@@ -310,7 +345,8 @@ homoscedasticity_test <- function(data, method) {
              ),
              lower_pH0 = p_H0(p_Value, priors = 0.8),
              pH0 = p_H0(p_Value, priors = 0.5),
-             upper_pH0 = p_H0(p_Value, priors = 0.2)
+             upper_pH0 = p_H0(p_Value, priors = 0.2) %>%
+      mutate(Band_freq = freq_details$Frequency..nm.)
       )
     return(homosc_results)
   }
@@ -338,44 +374,9 @@ JSD_Calculations <- function(data) {
     Band_name = paste("BAND_", i, sep = ""),
     Similarity = results
   ) %>% 
-    mutate(Band_name = factor(1:n()))
+    mutate(Band_name = factor(1:n())) %>%
+    mutate(Band_freq = freq_details$Frequency..nm.)
   return(distance_values)
-}
-
-# train-test machine learning split function
-
-split.data = function(data, p = 0.7, s = 666) {
-  set.seed(2)
-  index = sample (1:dim(data)[1])
-  train = data [index[1: floor(dim(data)[1]*p)],]
-  test = data [index[((ceiling(dim(data)[1]*p)) + 1) :dim(data)[1]],]
-  return(list(train = train, test = test))
-}
-
-# machine learning univariate filter
-
-ml_feature_selection <- function(data, min_band, max_band, method){
-  ctrl <- trainControl(method = "repeatedcv",
-                       number = 10, repeats = 10,
-                       classProbs = TRUE, summaryFunction = twoClassSummary)
-  ml_results <- c()
-  raw_data <- data[(min_band+2):(max_band+2)]
-  samples <- data$Sample
-  for (i in min_band:max_band){
-    target_raw_data <- raw_data[[paste("BAND_", i, sep = "")]]
-    target_data <- data.frame(Data = target_raw_data, Sample = samples)
-    allset <- split.data(target_data, p = 0.7)
-    trainset <- allset$train
-    testset <- allset$test
-    glm.model <- train(Sample ~ Data, data = target_data, method = method,
-                       metric = "ROC", trControl = ctrl)
-    glm.probs <- predict(glm.model, testset, type = "prob")
-    glm.ROC <- roc(response = testset$Sample, predictor = glm.probs[,2], levels = levels(testset$Sample))
-    ml_results <- c(ml_results, glm.ROC$auc[[1]])
-  }
-  ml_results <- tibble(AUC = ml_results) %>%
-    mutate(Band_name = factor(min_band:max_band))
-  return(ml_results)
 }
 
 # multivariate tests
@@ -395,6 +396,10 @@ multivariate_tests <- function(data, min_band, max_band, method) {
 
 a <- read.csv(url("https://raw.githubusercontent.com/LACourtenay/HyperSkinCare_Statistics/main/Files/Hyperspectral_Data.csv"))
 a$Sample <- factor(a$Sample); a$Patient_ID <- factor(a$Patient_ID)
+
+freq_details <- read.csv(url("https://raw.githubusercontent.com/LACourtenay/HyperSkinCare_Statistics/main/Files/Camera_Frequency_Details.csv"))
+freq_details$Band <- factor(freq_details$Band)
+ggplot_freq_scale <- scale_x_continuous(breaks = seq(408, 963, 111))
 
 # seperate data according to sample
 
@@ -432,243 +437,176 @@ View(SCC_normality_results)
 
 # Shapiro W and P value Plots
 
+shap_theme <- theme(panel.grid.major = element_blank(),
+                    panel.grid.minor = element_blank(),
+                    panel.background = element_blank(),
+                    axis.title.y = element_text(margin = margin(r = 10)),
+                    axis.ticks.x = element_blank(),
+                    axis.text.x = element_text(margin = margin(t = 5)),
+                    plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
+                    plot.title = element_text(face = "bold",
+                                              size = 15,
+                                              margin=margin(0,0,10,0)),
+                    axis.title = element_text(size = 15,
+                                              face = "bold"),
+                    axis.text = element_text(size = 10,
+                                             face = "bold"))
+
 shap_pvalues_SCC<-ggplot(data = SCC_normality_results,
-                    aes(x = Band_name,
-                        y = log(Shapiro_p))) +
+                         aes(x = Band_freq,
+                             y = log(Shapiro_p))) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   labs(title = "SCC - Shapiro Test (p Values)") +
+  shap_theme +
+  ggplot_freq_scale +
   geom_hline(yintercept = log(0.003), colour = "black", size = 1)
 shap_pvalues_BCC<-ggplot(data = BCC_normality_results,
-                    aes(x = Band_name,
-                        y = log(Shapiro_p))) +
+                         aes(x = Band_freq,
+                             y = log(Shapiro_p))) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   labs(title = "BCC - Shapiro Test (p Values)") +
+  shap_theme +
+  ggplot_freq_scale +
   geom_hline(yintercept = log(0.003), colour = "black", size = 1)
 shap_pvalues_H<-ggplot(data = H_normality_results,
-                  aes(x = Band_name,
-                      y = log(Shapiro_p))) +
+                       aes(x = Band_freq,
+                           y = log(Shapiro_p))) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   labs(title = "Healthy - Shapiro Test (p Values)") +
+  shap_theme +
+  ggplot_freq_scale +
   geom_hline(yintercept = log(0.003), colour = "black", size = 1)
 shap_wvalues_H<-ggplot(data = H_normality_results,
-                  aes(x = Band_name,
-                      y = Shapiro_w)) +
+                       aes(x = Band_freq,
+                           y = Shapiro_w)) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   labs(title = "Healthy - Shapiro Test (w Values)") +
+  shap_theme +
+  ggplot_freq_scale +
   coord_cartesian(ylim = c(0.91,1))
 shap_wvalues_SCC<-ggplot(data = SCC_normality_results,
-                    aes(x = Band_name,
-                        y = Shapiro_w)) +
+                         aes(x = Band_freq,
+                             y = Shapiro_w)) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   labs(title = "SCC - Shapiro Test (w Values)") +
+  shap_theme +
+  ggplot_freq_scale +
   coord_cartesian(ylim = c(0.91,1))
 shap_wvalues_BCC<-ggplot(data = BCC_normality_results,
-                    aes(x = Band_name,
-                        y = Shapiro_w)) +
+                         aes(x = Band_freq,
+                             y = Shapiro_w)) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   labs(title = "BCC - Shapiro Test (w Values)") +
+  shap_theme +
+  ggplot_freq_scale +
   coord_cartesian(ylim = c(0.91,1))
 skew_values_BCC<-ggplot(data = BCC_normality_results,
-                        aes(x = Band_name,
+                        aes(x = Band_freq,
                             y = Skew)) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
-  labs(title = "BCC - Skewness")
+  xlab("Wavelength (nm)") +
+  labs(title = "BCC - Skewness") +
+  shap_theme +
+  ggplot_freq_scale
 skew_values_SCC<-ggplot(data = SCC_normality_results,
-                        aes(x = Band_name,
+                        aes(x = Band_freq,
                             y = Skew)) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
-  labs(title = "SCC - Skewness")
+  xlab("Wavelength (nm)") +
+  labs(title = "SCC - Skewness") +
+  shap_theme +
+  ggplot_freq_scale
 skew_values_H<-ggplot(data = H_normality_results,
-                      aes(x = Band_name,
+                      aes(x = Band_freq,
                           y = Skew)) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
-  labs(title = "Healthy - Skewness")
+  xlab("Wavelength (nm)") +
+  labs(title = "Healthy - Skewness") +
+  shap_theme +
+  ggplot_freq_scale
 kurt_values_H<-ggplot(data = H_normality_results,
-                      aes(x = Band_name,
+                      aes(x = Band_freq,
                           y = Kurtosis)) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   labs(title = "Healthy - Kurtosis") +
+  shap_theme +
+  ggplot_freq_scale +
   geom_hline(yintercept = 0, colour = "black", size = 1)
 kurt_values_SCC<-ggplot(data = SCC_normality_results,
-                        aes(x = Band_name,
+                        aes(x = Band_freq,
                             y = Kurtosis)) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   labs(title = "SCC - Kurtosis") +
+  shap_theme +
+  ggplot_freq_scale +
   geom_hline(yintercept = 0, colour = "black", size = 1)
 kurt_values_BCC<-ggplot(data = BCC_normality_results,
-                        aes(x = Band_name,
+                        aes(x = Band_freq,
                             y = Kurtosis)) +
   geom_bar(stat = "identity", fill = "#999999") +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        plot.margin = margin(0.5,0.5,0.5,0.5,"cm"),
-        plot.title = element_text(face = "bold")) +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   labs(title = "BCC - Kurtosis") +
+  shap_theme +
+  ggplot_freq_scale +
   geom_hline(yintercept = 0, colour = "black", size = 1)
 
 #
 
+base_p_norm_theme <- theme(axis.title = element_text(face = "bold", size = 15),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10)),
+        axis.text = element_text(size = 12, face = "bold"),
+        plot.title = element_text(face = "bold", size = 15),
+        axis.text.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(margin = margin(t = 5)))
+
 H_shap_ph0_plot<-ggplot(data = H_normality_results,
-                        aes(x = Band_name, y = Shapiro_pH0, group = 1)) +
+                        aes(x = Band_freq, y = Shapiro_pH0, group = 1)) +
   geom_ribbon(aes(ymin = Shapiro_Lower_pH0, ymax = Shapiro_Upper_pH0),
               alpha = 0.2) +
   geom_line(size = 0.75) +
   theme_bw() +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   ylab("Probability of Null Hypothesis") +
   ggtitle("Shapiro Test Results - Healthy") +
-  theme(plot.margin = unit(c(1,1,0.5,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 15),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))) +
-  coord_cartesian(ylim = c(0, 1)) +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  theme(plot.margin = unit(c(1,1,0.5,1), "cm")) +
+  base_p_norm_theme +
+  ggplot_freq_scale +
+  coord_cartesian(ylim = c(0, 1))
 BCC_shap_ph0_plot<-ggplot(data = BCC_normality_results,
-                          aes(x = Band_name, y = Shapiro_pH0, group = 1)) +
+                          aes(x = Band_freq, y = Shapiro_pH0, group = 1)) +
   geom_ribbon(aes(ymin = Shapiro_Lower_pH0, ymax = Shapiro_Upper_pH0),
               alpha = 0.2) +
   geom_line(size = 0.75) +
   theme_bw() +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   ylab("Probability of Null Hypothesis") +
   ggtitle("Shapiro Test Results - BCC") +
-  theme(plot.margin = unit(c(0.5,1,1,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 15),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))) +
-  coord_cartesian(ylim = c(0, 1)) +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  theme(plot.margin = unit(c(0.5,1,1,1), "cm")) +
+  base_p_norm_theme +
+  ggplot_freq_scale +
+  coord_cartesian(ylim = c(0, 1))
 SCC_shap_ph0_plot<-ggplot(data = SCC_normality_results,
-                          aes(x = Band_name, y = Shapiro_pH0, group = 1)) +
+                          aes(x = Band_freq, y = Shapiro_pH0, group = 1)) +
   geom_ribbon(aes(ymin = Shapiro_Lower_pH0, ymax = Shapiro_Upper_pH0),
               alpha = 0.2) +
   geom_line(size = 0.75) +
   theme_bw() +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   ylab("Probability of Null Hypothesis") +
   ggtitle("Shapiro Test Results - SCC") +
-  theme(plot.margin = unit(c(0.5,1,1,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 15),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))) +
-  coord_cartesian(ylim = c(0, 1)) +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  theme(plot.margin = unit(c(0.5,1,1,1), "cm")) +
+  base_p_norm_theme +
+  ggplot_freq_scale +
+  coord_cartesian(ylim = c(0, 1))
 
 #
 
@@ -692,6 +630,7 @@ X11(); grid.arrange(H_shap_ph0_plot, BCC_shap_ph0_plot, SCC_shap_ph0_plot,
                     ncol = 2, nrow = 2)
 
 rm(H_shap_ph0_plot, BCC_shap_ph0_plot, SCC_shap_ph0_plot)
+rm(shap_theme, base_p_norm_theme)
 
 #
 
@@ -699,20 +638,21 @@ rm(H_shap_ph0_plot, BCC_shap_ph0_plot, SCC_shap_ph0_plot)
 
 C<-rbind(SCC, BCC); C$Sample <- fct_collapse(C$Sample, C = c("SCC", "BCC"))
 
-ggplot(data = residual_calculation(rbind(H, C)), aes(x = Band_name, y = Res_count, group = 1)) +
+ggplot(data = residual_calculation(rbind(H, C)), aes(x = Band_freq, y = Res_count, group = 1)) +
   geom_line(stat = "identity", colour = "black", size = 1) +
   theme_bw() +
   theme(plot.margin = unit(c(1,0.5,1,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
+        axis.title = element_text(face = "bold", size = 22),
         axis.title.x = element_text(margin = margin(t = 10)),
         axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 20),
+        axis.text = element_text(size = 13.5, face = "bold"),
+        plot.title = element_text(face = "bold", size = 25),
         axis.text.y = element_text(margin = margin(r = 5)),
         axis.text.x = element_text(margin = margin(t = 5))
   ) +
-  xlab("Band") +
-  scale_x_discrete(breaks = seq(0, 260, 50)) +
+  xlab("Wavelength (nm)") +
+  ylab("Residuals") +
+  ggplot_freq_scale +
   labs(title = "Residuals from Linear Gaussian Models")
 
 #
@@ -731,67 +671,60 @@ View(BCC_signature)
 
 # Visualise plot
 
+sig_theme <- theme(axis.title = element_text(face = "bold", size = 20),
+                   axis.title.x = element_text(margin = margin(t = 10)),
+                   axis.title.y = element_text(margin = margin(r = 10)),
+                   axis.text = element_text(size = 12.5, face = "bold"),
+                   plot.title = element_text(face = "bold", size = 22.5),
+                   axis.text.y = element_text(margin = margin(r = 5)),
+                   axis.text.x = element_text(margin = margin(t = 5)))
+
 grid.arrange(ggplot() +
-               geom_line(data = SCC_signature, aes(x = Band_name, y = Central, group = 1),
+               geom_line(data = SCC_signature, aes(x = Band_freq, y = Central, group = 1),
                          size = 0.75, colour = "#FF0000") +
-               geom_line(data = SCC_signature, aes(x = Band_name, y = Central + Upper_CI, group = 1),
+               geom_line(data = SCC_signature, aes(x = Band_freq, y = Central + Upper_CI, group = 1),
                          size = 0.5, colour = "#FF0000", linetype = "solid") +
-               geom_line(data = SCC_signature, aes(x = Band_name, y = Central - Lower_CI, group = 1),
+               geom_line(data = SCC_signature, aes(x = Band_freq, y = Central - Lower_CI, group = 1),
                          size = 0.5, colour = "#FF0000", linetype = "solid") +
-               geom_line(data = BCC_signature, aes(x = Band_name, y = Central, group = 1),
+               geom_line(data = BCC_signature, aes(x = Band_freq, y = Central, group = 1),
                          size = 0.75, colour = "#000000") +
-               geom_line(data = BCC_signature, aes(x = Band_name, y = Central + Upper_CI, group = 1),
+               geom_line(data = BCC_signature, aes(x = Band_freq, y = Central + Upper_CI, group = 1),
                          size = 0.5, colour = "#000000", linetype = "solid") +
-               geom_line(data = BCC_signature, aes(x = Band_name, y = Central - Lower_CI, group = 1),
+               geom_line(data = BCC_signature, aes(x = Band_freq, y = Central - Lower_CI, group = 1),
                          size = 0.5, colour = "#000000", linetype = "solid") +
-               geom_line(data = H_signature, aes(x = Band_name, y = Central, group = 1),
+               geom_line(data = H_signature, aes(x = Band_freq, y = Central, group = 1),
                          size = 0.75, colour = "#3399FF") +
-               geom_line(data = H_signature, aes(x = Band_name, y = Central + Upper_CI, group = 1),
+               geom_line(data = H_signature, aes(x = Band_freq, y = Central + Upper_CI, group = 1),
                          size = 0.5, colour = "#3399FF", linetype = "solid") +
-               geom_line(data = H_signature, aes(x = Band_name, y = Central - Lower_CI, group = 1),
+               geom_line(data = H_signature, aes(x = Band_freq, y = Central - Lower_CI, group = 1),
                          size = 0.5, colour = "#3399FF", linetype = "solid") +
                theme_bw() +
-               theme(plot.margin = unit(c(1,0.5,1,1), "cm"),
-                     axis.title = element_text(face = "bold", size = 15),
-                     axis.title.x = element_text(margin = margin(t = 10)),
-                     axis.title.y = element_text(margin = margin(r = 10)),
-                     axis.text = element_text(size = 12, face = "bold"),
-                     plot.title = element_text(face = "bold", size = 20),
-                     axis.text.y = element_text(margin = margin(r = 5)),
-                     axis.text.x = element_text(margin = margin(t = 5))
-               ) +
+               theme(plot.margin = unit(c(1,0.5,1,1), "cm")) +
+               sig_theme + 
                ggtitle("Robust Signature") +
-               xlab("Band_name") +
-               ylab("Intensity") +
+               xlab("Wavelength (nm)") +
+               ylab("Reflectance (%)") +
                coord_cartesian(ylim = c(0, 80)) +
-               scale_x_discrete(breaks = seq(0, 260, 50)), ggplot() +
-               geom_line(data = SCC_signature, aes(x = Band_name, y = Deviation, group = 1),
+               ggplot_freq_scale, ggplot() +
+               geom_line(data = SCC_signature, aes(x = Band_freq, y = Deviation, group = 1),
                          size = 0.75, colour = "#FF0000") +
-               geom_line(data = BCC_signature, aes(x = Band_name, y = Deviation, group = 1),
+               geom_line(data = BCC_signature, aes(x = Band_freq, y = Deviation, group = 1),
                          size = 0.75, colour = "#000000") +
-               geom_line(data = H_signature, aes(x = Band_name, y = Deviation, group = 1),
+               geom_line(data = H_signature, aes(x = Band_freq, y = Deviation, group = 1),
                          size = 0.75, colour = "#3399FF") +
                theme_bw() +
-               theme(plot.margin = unit(c(1,1,1,0.5), "cm"),
-                     axis.title = element_text(face = "bold", size = 15),
-                     axis.title.x = element_text(margin = margin(t = 10)),
-                     axis.title.y = element_text(margin = margin(r = 10)),
-                     axis.text = element_text(size = 12, face = "bold"),
-                     plot.title = element_text(face = "bold", size = 20),
-                     axis.text.y = element_text(margin = margin(r = 5)),
-                     axis.text.x = element_text(margin = margin(t = 5))
-               ) +
+               theme(plot.margin = unit(c(1,1,1,0.5), "cm")) +
+               sig_theme +
                ggtitle("Robust Variance") +
-               xlab("Band_name") +
-               ylab("Intensity") +
+               xlab("Wavelength (nm)") +
+               ylab("Reflectance (%)") +
                coord_cartesian(ylim = c(4, 12.1)) +
-               scale_x_discrete(breaks = seq(0, 260, 50)),
+               ggplot_freq_scale,
              ncol = 2, nrow = 1)
 
 # clear memory
 
-rm(H_signature, SCC_signature, BCC_signature)
-
+rm(H_signature, SCC_signature, BCC_signature, sig_theme)
 
 #
 
@@ -811,131 +744,105 @@ View(SCC_BCC_homosc)
 
 # prepare homoscedasticity p-value plots
 
+homosc_theme <- theme(plot.margin = unit(c(1,1,0.5,1), "cm"),
+        axis.title = element_text(face = "bold", size = 15),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10)),
+        axis.text = element_text(size = 12, face = "bold"),
+        plot.title = element_text(face = "bold", size = 15),
+        axis.text.y = element_text(margin = margin(r = 5)),
+        axis.text.x = element_text(margin = margin(t = 5)))
+
 homosc_H_BCC_plot<-ggplot(data = H_BCC_homosc,
-                          aes(x = Band_name, y = pH0, group = 1)) +
+                          aes(x = Band_freq, y = pH0, group = 1)) +
   geom_ribbon(aes(ymin = lower_pH0, ymax = upper_pH0),
               alpha = 0.2) +
   geom_line(size = 0.75) +
   theme_bw() +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   ylab("P(H0)") +
   ggtitle("H vs BCC") +
-  theme(plot.margin = unit(c(1,1,0.5,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 15),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))) +
+  homosc_theme +
   coord_cartesian(ylim = c(0, 1)) +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  ggplot_freq_scale
 homosc_H_SCC_plot<-ggplot(data = H_SCC_homosc,
-                          aes(x = Band_name, y = pH0, group = 1)) +
+                          aes(x = Band_freq, y = pH0, group = 1)) +
   geom_ribbon(aes(ymin = lower_pH0, ymax = upper_pH0),
               alpha = 0.2) +
   geom_line(size = 0.75) +
   theme_bw() +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   ylab("P(H0)") +
   ggtitle("H vs SCC") +
-  theme(plot.margin = unit(c(1,1,0.5,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 15),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))) +
+  homosc_theme +
   coord_cartesian(ylim = c(0, 1)) +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  ggplot_freq_scale
 homosc_SCC_BCC_plot<-ggplot(data = SCC_BCC_homosc,
-                            aes(x = Band_name, y = pH0, group = 1)) +
+                            aes(x = Band_freq, y = pH0, group = 1)) +
   geom_ribbon(aes(ymin = lower_pH0, ymax = upper_pH0),
               alpha = 0.2) +
   geom_line(size = 0.75) +
   theme_bw() +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   ylab("P(H0)") +
   ggtitle("SCC vs BCC") +
-  theme(plot.margin = unit(c(1,1,0.5,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 15),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))) +
+  homosc_theme +
   coord_cartesian(ylim = c(0, 1)) +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  ggplot_freq_scale
 
 # prepare homoscedasticity test statistic plots
 
 homosc_H_SCC_test_stat_plot<-ggplot(data = H_SCC_homosc, 
-                                    aes(x = Band_name,
+                                    aes(x = Band_freq,
                                         group = 1,
                                         y = Test_Statistic)) +
   geom_line(stat = "identity", size = 0.75) +
   theme_bw() +
-  theme(plot.margin = unit(c(1,1,0.5,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 15),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))) +
+  xlab("Wavelength (nm)") +
+  ylab("F") +
+  homosc_theme +
   labs(title = "H vs SCC") +
   theme(plot.title = element_text(face = "bold")) +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  ggplot_freq_scale
 homosc_H_BCC_test_stat_plot<-ggplot(data = H_BCC_homosc, 
-                                    aes(x = Band_name,
+                                    aes(x = Band_freq,
                                         group = 1,
                                         y = Test_Statistic)) +
   geom_line(stat = "identity", size = 0.75) +
   theme_bw() +
-  theme(plot.margin = unit(c(1,1,0.5,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 15),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))) +
+  xlab("Wavelength (nm)") +
+  ylab("F") +
+  homosc_theme +
   labs(title = "H vs BCC") +
   theme(plot.title = element_text(face = "bold")) +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  ggplot_freq_scale
 homosc_SCC_BCC_test_stat_plot<-ggplot(data = SCC_BCC_homosc, 
-                                      aes(x = Band_name,
+                                      aes(x = Band_freq,
                                           group = 1,
                                           y = Test_Statistic)) +
   geom_line(stat = "identity", size = 0.75) +
   theme_bw() +
-  theme(plot.margin = unit(c(1,1,0.5,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 15),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))) +
+  xlab("Wavelength (nm)") +
+  ylab("F") +
+  homosc_theme +
   labs(title = "SCC vs BCC") +
   theme(plot.title = element_text(face = "bold")) +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  ggplot_freq_scale
 
 # View plots
 
-grid.arrange(homosc_H_SCC_plot, homosc_H_SCC_test_stat_plot,
-             homosc_H_BCC_plot, homosc_H_BCC_test_stat_plot,
-             homosc_SCC_BCC_plot, homosc_SCC_BCC_test_stat_plot,
-             nrow = 3, ncol = 2)
+X11(); grid.arrange(homosc_H_SCC_plot, homosc_H_SCC_test_stat_plot,
+                    homosc_H_BCC_plot, homosc_H_BCC_test_stat_plot,
+                    homosc_SCC_BCC_plot, homosc_SCC_BCC_test_stat_plot,
+                    nrow = 3, ncol = 2)
 
 # clear memory
 
 rm(homosc_H_SCC_plot, homosc_H_SCC_test_stat_plot,
    homosc_H_BCC_plot, homosc_H_BCC_test_stat_plot,
    homosc_SCC_BCC_plot, homosc_SCC_BCC_test_stat_plot,
-   H_BCC_homosc, H_SCC_homosc, SCC_BCC_homosc)
+   H_BCC_homosc, H_SCC_homosc, SCC_BCC_homosc,
+   homosc_theme)
 
 #
 
@@ -947,28 +854,28 @@ SCC_BCC_JSD <- suppressMessages(suppressWarnings(JSD_Calculations(SCC_BCC)))
 
 ggplot() +
   geom_line(data = H_BCC_JSD,
-            aes(x = Band_name, y = Similarity, group = 1), size = 0.75,
+            aes(x = Band_freq, y = Similarity, group = 1), size = 0.75,
             color = "black") +
   geom_line(data = H_SCC_JSD,
-            aes(x = Band_name, y = Similarity, group = 1), size = 0.75,
+            aes(x = Band_freq, y = Similarity, group = 1), size = 0.75,
             color = "red") +
   geom_line(data = SCC_BCC_JSD,
-            aes(x = Band_name, y = Similarity, group = 1), size = 0.75,
+            aes(x = Band_freq, y = Similarity, group = 1), size = 0.75,
             color = "blue") +
   theme_bw() +
   theme(plot.margin = unit(c(1,1,1,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
+        axis.title = element_text(face = "bold", size = 20),
         axis.title.x = element_text(margin = margin(t = 10)),
         axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 20),
+        axis.text = element_text(size = 13, face = "bold"),
+        plot.title = element_text(face = "bold", size = 25),
         axis.text.y = element_text(margin = margin(r = 5)),
         axis.text.x = element_text(margin = margin(t = 5))
   ) +
   ggtitle("Jenson-Shannon Divergence") +
-  xlab("Band") +
+  xlab("Wavelength (nm)") +
   ylab("Similarity") +
-  scale_x_discrete(breaks = seq(0, 260, 50))
+  ggplot_freq_scale
 
 # clear memory
 
@@ -976,54 +883,10 @@ rm(H_BCC_JSD, H_SCC_JSD, SCC_BCC_JSD)
 
 #
 
-# Univariate Machine Learning Feature Selection ---------------------------------------
-
-H_SCC_ml_results <- suppressMessages(ml_feature_selection(H_SCC, min_band = 53, max_band = 205,
-                                                          method = "glm") # choose either method = "svmRadial" or "glm"
-)
-H_BCC_ml_results <- suppressMessages(ml_feature_selection(H_BCC, min_band = 53, max_band = 205,
-                                                          method = "glm") # choose either method = "svmRadial" or "glm"
-)
-SCC_BCC_ml_results <- suppressMessages(ml_feature_selection(SCC_BCC, min_band = 53, max_band = 205,
-                                                          method = "glm") # choose either method = "svmRadial" or "glm"
-)
-
-ggplot() +
-  geom_line(data = H_BCC_ml_results,
-            aes(x = Band_name, y = AUC, group = 1), size = 0.75,
-            color = "black") +
-  geom_line(data = H_SCC_ml_results,
-            aes(x = Band_name, y = AUC, group = 1), size = 0.75,
-            color = "red") +
-  geom_line(data = SCC_BCC_ml_results,
-            aes(x = Band_name, y = AUC, group = 1), size = 0.75,
-            color = "blue") +
-  theme_bw() +
-  theme(plot.margin = unit(c(1,1,1,1), "cm"),
-        axis.title = element_text(face = "bold", size = 15),
-        axis.title.x = element_text(margin = margin(t = 10)),
-        axis.title.y = element_text(margin = margin(r = 10)),
-        axis.text = element_text(size = 12, face = "bold"),
-        plot.title = element_text(face = "bold", size = 20),
-        axis.text.y = element_text(margin = margin(r = 5)),
-        axis.text.x = element_text(margin = margin(t = 5))
-  ) +
-  ggtitle("Receiver Operating Characteristics") +
-  xlab("Band") +
-  ylab("Area Under Curve") +
-  coord_cartesian(ylim = c(0.45, 0.65)) +
-  scale_x_discrete(breaks = seq(50, 210, 20))
-
-# clear memory
-
-rm(H_SCC_ml_results, H_BCC_ml_results, SCC_BCC_ml_results)
-
-#
-
 # Multivariate Hypothesis entire spectrum ---------------------------------------
 
 mult_diff <- multivariate_tests(a, min_band = 1, max_band = 260,
-                   method = "Wilcox") # select either Wilcox or MANOVA
+                                method = "Wilcox") # select either Wilcox or MANOVA
 
 # p-value table
 
@@ -1098,7 +961,7 @@ rm(mult_diff)
 # Multivariate Hypothesis between 573 and 779nm ---------------------------------------
 
 mult_diff <- multivariate_tests(a, min_band = 75, max_band = 168,
-                   method = "Wilcox") # select either Wilcox or MANOVA
+                                method = "Wilcox") # select either Wilcox or MANOVA
 
 # p-value table
 
@@ -1173,7 +1036,7 @@ rm(mult_diff)
 # Multivariate Hypothesis between 429 and 520 nm ---------------------------------------
 
 mult_diff <- multivariate_tests(a, min_band = 10, max_band = 51,
-                   method = "Wilcox") # select either Wilcox or MANOVA
+                                method = "Wilcox") # select either Wilcox or MANOVA
 
 # p-value table
 
@@ -1244,5 +1107,3 @@ for (i in c(0.2, 0.5, 0.8)) {
 rm(mult_diff)
 
 #
-
-
