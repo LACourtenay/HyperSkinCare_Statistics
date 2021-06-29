@@ -59,8 +59,8 @@ The present repository contains:
 
 Please cite this repository as:
 
- <b> Courtenay (2021) HYPER-SKINCARE: Code and Data for Courtenay et al. (Under Review) Hyperspectral Imaging and
- Robust Statistics in Non-Melanoma Skin Cancer Analysis. https://github.com/LACourtenay/HyperSkinCare_Statistics
+ <b> Courtenay (2021) Code and Data for the HYPER-SKINCARE project and paper titled 'Hyperspectral Imaging and
+ Robust Statistics in Non-Melanoma Skin Cancer Analysis'. https://github.com/LACourtenay/HyperSkinCare_Statistics
 </b>
 
 --------------------------------------------------------
