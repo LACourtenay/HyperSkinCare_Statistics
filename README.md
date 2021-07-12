@@ -57,6 +57,10 @@ The present repository contains:
 
 --------------------------------------------------------
 
+The present repository also contains some unpublished data closely linked to a follow up article employing computational learning for the processing of these signatures. This complementary unpublished data was calculated using univariate logistic regression algorithms to calculate the receiver operating characteristic for each wavelength seperately. The corresponding Area Under Curves have been included within a table. This was performed for additional feature selection, and has also been incorporated into the JavaScript code to produce the "Optimal Window" figure.
+
+--------------------------------------------------------
+
 Please cite this repository as:
 
  <b> Courtenay (2021) Code and Data for the HYPER-SKINCARE project and paper titled 'Hyperspectral Imaging and
