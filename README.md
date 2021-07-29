@@ -28,8 +28,8 @@ This code has been designed for the open-source free R programming languages.
 
 This code was designed and prepared for the study by:
 <b> Courtenay, L.A.; González-Aguilera, D.; Lagüela, S.; Del Pozo, S.; Ruiz-Mendez, C.; Barbero-García, I.; Román-Curto, C.; Cañueto, J.;
-Santos-Durán, C.; Cardeñozo-Álvarez, M.E.; Roncero-Riesco, M.; Hernandez-Lopez, D.; Guerrero-Sevilla, D.; Rodríguez-Gonzalvez, P. (Accepted)
-Hyperspectral Imaging and Robust Statistics in Non-Melanoma Skin Cancer Analysis. Submitted to Biomedical Optics Express. </b>
+Santos-Durán, C.; Cardeñozo-Álvarez, M.E.; Roncero-Riesco, M.; Hernandez-Lopez, D.; Guerrero-Sevilla, D.; Rodríguez-Gonzalvez, P. (2021)
+Hyperspectral Imaging and Robust Statistics in Non-Melanoma Skin Cancer Analysis, <i>Biomedical Optics Express</i>, 12(8):5107-5127, doi: 10.1364/BOE.428143  </b>
 
 All of the research included within the present repository was collected as part of the <b> HYPER-SKINCARE </b> research project, funded by the
 Junta de Castilla y Leon with project reference number: GRS 1837/A/18.
